@@ -1,6 +1,6 @@
 import Router from "next/router";
-import { createContext, ReactNode, useState } from "react";
-import { setCookie } from "nookies";
+import { createContext, ReactNode, useEffect, useState } from "react";
+import { setCookie, parseCookies } from "nookies";
 
 import { api } from "../services/api";
 
@@ -32,6 +32,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const isAuthenticated = !!user;
 
+  useEffect(() => {
+    const { "nextAuth.token": token } = parseCookies();
+
+    if (token) {
+      api.get("/me").then((response) => {
+        const { email, permissions, roles } = response.data;
+
+        setUser({ email, permissions, roles });
+      });
+    }
+  }, []);
+
   async function singIn({ email, password }: SingInCredentials) {
     try {
       const response = await api.post("sessions", {
@@ -49,6 +61,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         maxAge: 60 * 60 * 24 * 30, // 30days
         path: "/",
       });
+
+      api.defaults.headers.common["Authorization"] = `Bearer${token}`;
 
       setUser({ email, permissions, roles });
 
