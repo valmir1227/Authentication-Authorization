@@ -1,8 +1,9 @@
-import Router from "next/router";
 import { createContext, ReactNode, useEffect, useState } from "react";
 import { setCookie, parseCookies, destroyCookie } from "nookies";
 
-import { api } from "../services/api";
+import Router from "next/router";
+
+import { api } from "../services/apiClient";
 
 type User = {
   email: string;
@@ -16,7 +17,8 @@ type SingInCredentials = {
 };
 
 type AuthContextData = {
-  singIn(Credentials: SingInCredentials): Promise<void>;
+  singIn(credentials: SingInCredentials): Promise<void>;
+  singOut: () => void;
   user: User;
   isAuthenticated: boolean;
 };
@@ -27,9 +29,13 @@ type AuthProviderProps = {
 
 export const AuthContext = createContext({} as AuthContextData);
 
+let authChannel: BroadcastChannel;
+
 export function singOut() {
   destroyCookie(undefined, "nextAuth.token"),
     destroyCookie(undefined, "nextAuth.refreshToken");
+
+  authChannel.postMessage("singOut");
 
   Router.push("/");
 }
@@ -38,6 +44,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User>();
 
   const isAuthenticated = !!user;
+
+  useEffect(() => {
+    authChannel = new BroadcastChannel("auth");
+
+    authChannel.onmessage = (message) => {
+      switch (message.data) {
+        case "singOut":
+          singOut();
+          break;
+        default:
+          break;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const { "nextAuth.token": token } = parseCookies();
@@ -74,9 +94,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         path: "/",
       });
 
-      api.defaults.headers.common["Authorization"] = `Bearer${token}`;
-
       setUser({ email, permissions, roles });
+
+      api.defaults.headers.common["Authorization"] = `Bearer${token}`;
 
       Router.push("/dashboard");
     } catch (error) {
@@ -84,7 +104,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
   return (
-    <AuthContext.Provider value={{ singIn, isAuthenticated, user }}>
+    <AuthContext.Provider value={{ singIn, singOut, isAuthenticated, user }}>
       {children}
     </AuthContext.Provider>
   );

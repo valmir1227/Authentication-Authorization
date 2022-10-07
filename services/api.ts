@@ -1,11 +1,12 @@
 import axios, { AxiosError } from "axios";
 import { parseCookies, setCookie } from "nookies";
 import { singOut } from "../contexts/AuthContext";
+import {AuthTokenError} from "./errors/AuthTokenError"
 
 let isRefreshing = false;
 let failedRequestQueue = [];
 
-export function setupAPIClient(ctx: undefined) {
+export function setupAPIClient(ctx = undefined) {
   let cookies = parseCookies(ctx);
 
   const api = axios.create({
@@ -20,7 +21,7 @@ export function setupAPIClient(ctx: undefined) {
       return response;
     },
     (error: AxiosError) => {
-      if (error.response?.status === 401) {
+      if (error.response.status === 401) {
         if (error.response.data?.code === "token.expired") {
           //Renovar token
           cookies = parseCookies(ctx);
@@ -60,7 +61,7 @@ export function setupAPIClient(ctx: undefined) {
                 failedRequestQueue = [];
               })
               .catch((err) => {
-                failedRequestQueue.forEach((request) => request.onSuccess(err));
+                failedRequestQueue.forEach((request) => request.onFailure(err));
                 failedRequestQueue = [];
 
                 if (process.browser) {
@@ -85,10 +86,15 @@ export function setupAPIClient(ctx: undefined) {
             });
           });
         } else {
-          singOut();
+          if (process.browser) {
+            singOut();
+          } else {
+            return Promise.reject(error);
+          }
         }
       }
       return Promise.reject(error);
     }
   );
+  return api;
 }
